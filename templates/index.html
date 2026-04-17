@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .filter-btn { border-radius: 20px; font-size: 0.8rem; }
+        .book-card { border-left: 5px solid #0d6efd; margin-bottom: 10px; }
+        .thumb-img { width: 45px; height: 65px; object-fit: cover; border-radius: 4px; background: #eee; }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container py-3">
+    <div class="d-flex gap-2 overflow-auto mb-3 pb-2">
+        {% for s in ['All', 'Read', 'Currently Reading', 'Want to Read'] %}
+        <a href="{{ url_for('index', status=s, search=search_query) }}" 
+           class="btn btn-sm {% if current_status == s %}btn-primary{% else %}btn-outline-secondary{% endif %} filter-btn text-nowrap">
+           {{ s }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="list-group shadow-sm">
+        {% for book in books %}
+        <a href="{{ url_for('book_details', book_id=book.id) }}" class="list-group-item list-group-item-action book-card d-flex align-items-center">
+            
+            <img src="{{ get_cover_url(book.cover_path) }}" class="thumb-img me-3" 
+                 onerror="this.src='https://via.placeholder.com/45x65?text=No+Img'">
+            
+            <div class="flex-grow-1">
+                <h6 class="mb-0 fw-bold">{{ book.title }}</h6>
+                <small class="text-muted">{{ book.author }}</small>
+            </div>
+            <span class="badge bg-info text-dark small">{{ book.rating }}⭐</span>
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        {% if current_page > 1 %}
+            <a href="{{ url_for('index', status=current_status, search=search_query, page=current_page-1) }}" class="btn btn-sm btn-outline-primary">← Prev</a>
+        {% else %}
+            <div></div>
+        {% endif %}
+        
+        <span class="small text-muted text-center">Page {{ current_page }} of {{ total_pages }}</span>
+        
+        {% if current_page < total_pages %}
+            <a href="{{ url_for('index', status=current_status, search=search_query, page=current_page+1) }}" class="btn btn-sm btn-outline-primary">Next →</a>
+        {% else %}
+            <div></div>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>

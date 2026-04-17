@@ -1,0 +1,29 @@
+<div class="table-responsive">
+    <table class="table table-sm table-hover align-middle" style="font-size: 0.85rem;">
+        <thead class="table-light">
+            <tr>
+                <th>Title</th>
+                <th class="text-center">{% if is_series %}#{% else %}Year{% endif %}</th>
+                <th class="text-end">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="fw-bold text-wrap">{{ item.title }}</td>
+                <td class="text-center text-muted">
+                    {% if is_series %}{{ item.series_number or '-' }}{% else %}{{ item.year_published or '-' }}{% endif %}
+                </td>
+                <td class="text-end">
+                    <span class="badge {% if item.status == 'Read' %}bg-success{% elif item.status == 'Currently Reading' %}bg-primary{% else %}bg-secondary{% endif %}" style="font-size: 0.7rem;">
+                        {{ item.status }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if not items %}
+<p class="text-center text-muted my-3">No works found in database.</p>
+{% endif %}
