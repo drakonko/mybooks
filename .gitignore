@@ -1,0 +1,16 @@
+# Ignore Python's temporary "brain" files
+__pycache__/
+*.pyc
+
+# Ignore local secret files (where you keep passwords)
+.env
+
+# Ignore your local covers (since they are now in Supabase Storage)
+covers/
+
+# Ignore old local SQLite databases
+*.db
+
+# Ignore virtual environments
+venv/
+.venv/
