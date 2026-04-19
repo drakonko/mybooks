@@ -62,15 +62,28 @@ def book_details(book_id):
 
 @app.route('/api/author/<name>')
 def api_author(name):
-    # Увери се, че имаш тази функция в database.py или я замени с филтрирана fetch_all
-    books = database.fetch_author_bibliography(name)
+    # Вземаме данните от базата
+    df = database.fetch_author_bibliography(name)
+    
+    # КРИТИЧНО: Превръщаме DataFrame в списък от речници
+    books = df.to_dict('records')
+    
+    if not books:
+        return "<p class='text-muted p-3'>Няма открити допълнителни творби за този автор.</p>"
+        
     return render_template('parts/book_list_mini.html', items=books, title=name)
 
 @app.route('/api/series/<name>')
 def api_series(name):
-    # Логика за показване на книги от същата поредица
-    all_books = database.fetch_all_books()
-    series_books = all_books[all_books['series_info'] == name].to_dict('records')
+    # Тук също е по-добре да филтрираме директно през базата или да подсигурим речниците
+    all_books_df = database.fetch_all_books()
+    
+    # Филтрираме внимателно (case-insensitive и без интервали)
+    series_books = all_books_df[all_books_df['series_info'].str.strip() == name.strip()].to_dict('records')
+    
+    if not series_books:
+        return "<p class='text-muted p-3'>Няма други книги от тази поредица.</p>"
+        
     return render_template('parts/book_list_mini.html', items=series_books, title=name, is_series=True)
 
 if __name__ == '__main__':
