@@ -246,3 +246,25 @@ def get_book_by_id(book_id):
         cur.execute("SELECT * FROM books WHERE id = %s", (int(book_id),))
         return cur.fetchone()
     finally: conn.close()
+
+def get_books_by_author_fast(author_name):
+    """Лека SQL заявка за уеб попъпа - без Pandas."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        # Търсим в таблицата с библиографии
+        cur.execute("SELECT book_title, release_year, series_order FROM author_works WHERE author_name ILIKE %s ORDER BY release_year DESC", (author_name,))
+        return cur.fetchall() # Връща директно списък от речници
+    finally:
+        conn.close()
+
+def get_books_by_series_fast(series_name):
+    """Лека SQL заявка за серия - без зареждане на цялата база."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        # Търсим само книгите от тази серия в основната таблица
+        cur.execute("SELECT title, year_published, series_number, status FROM books WHERE series_info = %s ORDER BY series_number::float ASC", (series_name,))
+        return cur.fetchall()
+    finally:
+        conn.close()
