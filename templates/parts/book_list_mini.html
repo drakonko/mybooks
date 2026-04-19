@@ -1,24 +1,21 @@
 <div class="modal-header">
-    <h5 class="modal-title">{% if is_series %}Поредица: {% else %}Автор: {% endif %}{{ title }}</h5>
-    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <h6 class="modal-title fw-bold">{% if is_series %}🔗 {{ title }}{% else %}✍️ {{ title }}{% endif %}</h6>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 </div>
-<div class="modal-body p-0">
+<div class="modal-body p-0" style="max-height: 400px; overflow-y: auto;">
     <div class="list-group list-group-flush">
         {% for item in items %}
-        <div class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-                <div class="fw-bold">{{ item.book_title if item.book_title else item.title }}</div>
-                <small class="text-muted">
-                    {% if item.release_year or item.year_published %}
-                        {{ item.release_year if item.release_year else item.year_published }} г.
-                    {% endif %}
-                    {% if item.series_order and item.series_order != '0' %}
-                        (Книга #{{ item.series_order }})
-                    {% endif %}
+        <div class="list-group-item py-2 px-3 d-flex justify-content-between align-items-center">
+            <div style="max-width: 80%;">
+                <div class="fw-bold small">{{ item.book_title if item.book_title else item.title }}</div>
+                <small class="text-muted" style="font-size: 0.75rem;">
+                    {{ item.release_year if item.release_year else item.year_published }} г.
+                    {% set order = item.series_order if item.series_order else item.series_number %}
+                    {% if order and order != '0' %} | Книга #{{ order }}{% endif %}
                 </small>
             </div>
             {% if item.status %}
-                <span class="badge bg-secondary rounded-pill" style="font-size: 0.6rem;">{{ item.status }}</span>
+                <span class="badge bg-light text-dark border" style="font-size: 0.6rem;">{{ item.status }}</span>
             {% endif %}
         </div>
         {% endfor %}
