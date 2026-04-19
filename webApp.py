@@ -62,29 +62,23 @@ def book_details(book_id):
 
 @app.route('/api/author/<name>')
 def api_author(name):
-    # Вземаме данните от базата
-    df = database.fetch_author_bibliography(name)
-    
-    # КРИТИЧНО: Превръщаме DataFrame в списък от речници
-    books = df.to_dict('records')
+    # Вече не ползваме Pandas тук!
+    books = database.get_books_by_author_fast(name)
     
     if not books:
-        return "<p class='text-muted p-3'>Няма открити допълнителни творби за този автор.</p>"
+        return "<p class='text-muted p-3 small text-center'>Няма открити данни в библиографията.</p>"
         
     return render_template('parts/book_list_mini.html', items=books, title=name)
 
 @app.route('/api/series/<name>')
 def api_series(name):
-    # Тук също е по-добре да филтрираме директно през базата или да подсигурим речниците
-    all_books_df = database.fetch_all_books()
+    # Директна филтрирана заявка към облака
+    books = database.get_books_by_series_fast(name)
     
-    # Филтрираме внимателно (case-insensitive и без интервали)
-    series_books = all_books_df[all_books_df['series_info'].str.strip() == name.strip()].to_dict('records')
-    
-    if not series_books:
-        return "<p class='text-muted p-3'>Няма други книги от тази поредица.</p>"
+    if not books:
+        return "<p class='text-muted p-3 small text-center'>Няма други книги в тази поредица.</p>"
         
-    return render_template('parts/book_list_mini.html', items=series_books, title=name, is_series=True)
+    return render_template('parts/book_list_mini.html', items=books, title=name, is_series=True)
 
 if __name__ == '__main__':
     print("\n--- CLOUD WEB APP STARTING ---")
