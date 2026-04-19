@@ -15,32 +15,44 @@ def utility_processor():
     def get_cover_url(path):
         """Превръща името на файла в пълен интернет адрес."""
         if not path or str(path).lower() in ["none", "nan", ""]:
-            # Ако няма корица, показваме картинка по подразбиране от папка /static/
+            # Ако няма корица, показваме картинка по подразбиране
             return url_for('static', filename='default_cover.png')
         
-        # Взимаме само името на файла (в случай че в базата има останал стар път)
+        # Взимаме само името на файла
         filename = os.path.basename(path)
-        # Кодираме го (заради интервали и специални знаци) и добавяме облачния адрес
+        # Кодираме го и добавяме облачния адрес
         return f"{SUPABASE_COVERS_URL}{quote(filename)}"
     
     return dict(get_cover_url=get_cover_url)
 
-# --- ПРЕМАХНАТО: Вече не ни трябва локалният маршрут /covers/ ---
-
 @app.route('/')
 def index():
+    # 1. Взимаме параметрите от URL адреса
     status = request.args.get('status', 'All')
+    genre = request.args.get('genre', 'All') # НОВО: Филтър за жанр
     search = request.args.get('search', '').strip()
     page = request.args.get('page', 1, type=int)
+    
     per_page = 20
     offset = (page - 1) * per_page
     
-    books = database.get_books_paginated(status, per_page, offset, search)
-    total_books = database.get_total_book_count(status, search)
+    # 2. Извикваме обновените функции от database.py с новия параметър genre
+    books = database.get_books_paginated(status, genre, per_page, offset, search)
+    total_books = database.get_total_book_count(status, genre, search)
+    
+    # 3. Взимаме списък с всички налични жанрове за падащото меню
+    all_genres = database.get_unique_genres()
+    
     total_pages = math.ceil(total_books / per_page)
     
-    return render_template('index.html', books=books, current_status=status, 
-                           search_query=search, current_page=page, total_pages=total_pages)
+    return render_template('index.html', 
+                           books=books, 
+                           current_status=status, 
+                           current_genre=genre,   # Изпращаме текущия избран жанр
+                           all_genres=all_genres, # Изпращаме списъка с всички жанрове
+                           search_query=search, 
+                           current_page=page, 
+                           total_pages=total_pages)
 
 @app.route('/book/<int:book_id>')
 def book_details(book_id):
@@ -50,19 +62,23 @@ def book_details(book_id):
 
 @app.route('/api/author/<name>')
 def api_author(name):
-    books = database.get_books_by_author(name)
+    # Увери се, че имаш тази функция в database.py или я замени с филтрирана fetch_all
+    books = database.fetch_author_bibliography(name)
     return render_template('parts/book_list_mini.html', items=books, title=name)
 
 @app.route('/api/series/<name>')
 def api_series(name):
-    books = database.get_books_by_series(name)
-    return render_template('parts/book_list_mini.html', items=books, title=name, is_series=True)
+    # Логика за показване на книги от същата поредица
+    all_books = database.fetch_all_books()
+    series_books = all_books[all_books['series_info'] == name].to_dict('records')
+    return render_template('parts/book_list_mini.html', items=series_books, title=name, is_series=True)
 
 if __name__ == '__main__':
-    # Вече не проверяваме локалната папка, защото всичко е в облака
     print("\n--- CLOUD WEB APP STARTING ---")
     print(f"Database: Supabase Cloud")
     print(f"Images: {SUPABASE_COVERS_URL}")
     print("------------------------------\n")
     
-    app.run(debug=True, host='0.0.0.0', port=9999, use_reloader=False)
+    # На Render портът се подава автоматично, но за локални тестове ползваме 9999
+    port = int(os.environ.get("PORT", 9999))
+    app.run(debug=True, host='0.0.0.0', port=port)
