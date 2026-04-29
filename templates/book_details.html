@@ -1,42 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ book.title }} - Details</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         .clickable { color: #0d6efd; text-decoration: underline; cursor: pointer; }
-        .hero-img { width: 100%; max-width: 240px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.2); min-height: 300px; background: #eee; }
+        .hero-img { width: 100%; max-width: 240px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.2); min-height: 300px; background: #eee; object-fit: cover; }
         .info-label { font-size: 0.75rem; color: #6c757d; font-weight: bold; text-transform: uppercase; }
         .info-data { font-weight: 600; margin-bottom: 10px; }
+        .back-btn { font-weight: 500; color: #6c757d; transition: all 0.2s; }
+        .back-btn:hover { color: #0d6efd; }
     </style>
 </head>
 <body class="bg-light">
 <div class="container py-4">
-    <a href="{{ url_for('index') }}" class="btn btn-sm btn-link mb-3 p-0 text-decoration-none">← Back</a>
+    
+    <div class="mb-3">
+        <a href="{{ url_for('index', 
+                            status=request.args.get('status', 'All'), 
+                            genre=request.args.get('genre', 'All'), 
+                            year=request.args.get('year', 'All'), 
+                            search=request.args.get('search', ''), 
+                            page=request.args.get('page', 1)) }}" 
+           class="btn btn-sm btn-link back-btn p-0 text-decoration-none">
+            ← Back to Library
+        </a>
+    </div>
 
     <div class="text-center mb-4">
         <img src="{{ get_cover_url(book.cover_path) }}" class="hero-img mb-3" 
              onerror="this.src='https://via.placeholder.com/240x360?text=Cover+Not+Found'">
         
-        <h2 class="fw-bold">{{ book.title }}</h2>
+        <h2 class="fw-bold px-2">{{ book.title }}</h2>
         <p class="fs-5 clickable" onclick="showPopup('author', '{{ book.author }}')">by {{ book.author }}</p>
     </div>
 
     <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
         <div class="row text-center border-bottom pb-3 mb-3">
-            <div class="col-4 border-end"><div class="info-label">Rating</div><div class="info-data">{{ book.rating }} ⭐</div></div>
-            <div class="col-4 border-end"><div class="info-label">Pages</div><div class="info-data">{{ book.number_of_pages or '?' }}</div></div>
-            <div class="col-4"><div class="info-label">Year</div><div class="info-data">{{ book.year_published or '?' }}</div></div>
+            <div class="col-4 border-end">
+                <div class="info-label">Rating</div>
+                <div class="info-data">{{ book.rating }} ⭐</div>
+            </div>
+            <div class="col-4 border-end">
+                <div class="info-label">Pages</div>
+                <div class="info-data">{{ book.number_of_pages or '?' }}</div>
+            </div>
+            <div class="col-4">
+                <div class="info-label">Year</div>
+                <div class="info-data">{{ book.year_published or '?' }}</div>
+            </div>
         </div>
 
         <div class="row">
             <div class="col-6 mb-3">
                 <div class="info-label">Status</div>
-                <div class="info-data"><span class="badge bg-primary rounded-pill">{{ book.status }}</span></div>
+                <div class="info-data"><span class="badge bg-primary rounded-pill px-3">{{ book.status }}</span></div>
             </div>
             <div class="col-6 mb-3">
                 <div class="info-label">Genre</div>
-                <div class="info-data">{{ book.genre or 'Uncategorized' }}</div>
+                <div class="info-data text-truncate">{{ book.genre or 'Uncategorized' }}</div>
             </div>
             {% if book.series_info %}
             <div class="col-12 clickable" onclick="showPopup('series', '{{ book.series_info }}')">
@@ -49,13 +73,22 @@
 
     <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
         <h6 class="fw-bold mb-2">Description</h6>
-        <p class="small text-muted">{{ book.description or 'No description provided.' }}</p>
+        <p class="text-muted" style="font-size: 0.9rem; line-height: 1.6;">{{ book.description or 'No description provided.' }}</p>
         
-        <div class="mt-4 pt-3 border-top x-small">
-            <div class="row">
-                <div class="col-6"><div class="info-label">ISBN-13</div><div class="small">{{ book.isbn13 or 'N/A' }}</div></div>
-                <div class="col-6"><div class="info-label">ISBN-10</div><div class="small">{{ book.isbn or 'N/A' }}</div></div>
-                <div class="col-12 mt-2"><div class="info-label">Finished On</div><div class="small">{{ book.date_finished or '---' }}</div></div>
+        <div class="mt-4 pt-3 border-top">
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="info-label">ISBN-13</div>
+                    <div class="small text-dark fw-medium">{{ book.isbn13 or 'N/A' }}</div>
+                </div>
+                <div class="col-6">
+                    <div class="info-label">ISBN-10</div>
+                    <div class="small text-dark fw-medium">{{ book.isbn or 'N/A' }}</div>
+                </div>
+                <div class="col-12 mt-2">
+                    <div class="info-label">Finished On</div>
+                    <div class="small text-dark fw-medium">📅 {{ book.date_finished or '---' }}</div>
+                </div>
             </div>
         </div>
     </div>
@@ -63,9 +96,13 @@
 
 <div class="modal fade" id="infoModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 border-0 shadow">
-            <div class="modal-header border-0"><h5 class="fw-bold" id="mTitle"></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div id="mBody" class="modal-body pt-0"></div>
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="fw-bold" id="mTitle"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div id="mBody" class="modal-body">
+                </div>
         </div>
     </div>
 </div>
@@ -73,13 +110,34 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function showPopup(type, name) {
-    const modal = new bootstrap.Modal(document.getElementById('infoModal'));
+    const modalElement = document.getElementById('infoModal');
+    const modal = new bootstrap.Modal(modalElement);
+    
     document.getElementById('mTitle').innerText = name;
-    document.getElementById('mBody').innerHTML = '<div class="text-center p-3">Loading...</div>';
+    document.getElementById('mBody').innerHTML = `
+        <div class="text-center p-4">
+            <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+            <div class="mt-2 small text-muted">Loading works...</div>
+        </div>
+    `;
+    
     modal.show();
-    fetch(`/api/${type}/${encodeURIComponent(name)}`).then(r => r.text()).then(html => {
-        document.getElementById('mBody').innerHTML = html;
-    });
+    
+    fetch(`/api/${type}/${encodeURIComponent(name)}`)
+        .then(r => {
+            if (!r.ok) throw new Error('Network response was not ok');
+            return r.text();
+        })
+        .then(html => {
+            document.getElementById('mBody').innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('mBody').innerHTML = `
+                <div class="alert alert-danger small m-2">
+                    Could not load data. Please try again later.
+                </div>
+            `;
+        });
 }
 </script>
 </body>

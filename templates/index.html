@@ -21,6 +21,8 @@
             z-index: 5;
         }
         .btn-clear-search:hover { color: #333; }
+        .filter-select { border-radius: 10px; font-size: 0.85rem; border: 1px solid #dee2e6; }
+        .results-count { font-size: 0.75rem; color: #6c757d; font-weight: bold; }
     </style>
 </head>
 <body class="bg-light">
@@ -28,24 +30,26 @@
     
     <div class="d-flex gap-2 overflow-auto mb-3 pb-2">
         {% for s in ['All', 'Read', 'Currently Reading', 'Want to Read', 'Did Not Finish'] %}
-        <a href="{{ url_for('index', status=s, search=search_query) }}" 
-           class="btn btn-sm {% if current_status == s %}btn-primary{% else %}btn-outline-secondary{% endif %} filter-btn text-nowrap">
+        <a href="{{ url_for('index', status=s, search=search_query, genre=current_genre, year=current_year) }}" 
+           class="btn btn-sm {% if current_status == s %}btn-primary{% else %}btn-outline-secondary{% endif %} filter-btn text-nowrap shadow-sm">
             {{ s }}
         </a>
         {% endfor %}
     </div>
 
-    <div class="mb-4">
+    <div class="mb-3">
         <form action="{{ url_for('index') }}" method="get" class="search-container">
             <input type="hidden" name="status" value="{{ current_status }}">
+            <input type="hidden" name="genre" value="{{ current_genre }}">
+            <input type="hidden" name="year" value="{{ current_year }}">
             
-            <div class="input-group">
+            <div class="input-group shadow-sm">
                 <input type="text" name="search" class="form-control" 
                        placeholder="Търси заглавие или автор..." 
                        value="{{ search_query if search_query else '' }}">
                 
                 {% if search_query %}
-                <a href="{{ url_for('index', status=current_status) }}" class="btn-clear-search text-decoration-none">
+                <a href="{{ url_for('index', status=current_status, genre=current_genre, year=current_year) }}" class="btn-clear-search text-decoration-none">
                     &#x2716;
                 </a>
                 {% endif %}
@@ -53,58 +57,100 @@
                 <button class="btn btn-primary" type="submit">Търси</button>
             </div>
         </form>
+    </div>
+
+    <form action="{{ url_for('index') }}" method="get" class="mb-2">
+        <input type="hidden" name="status" value="{{ current_status }}">
+        <input type="hidden" name="search" value="{{ search_query }}">
         
-        {% if search_query %}
-        <div class="mt-2 small text-muted">
-            Показани резултати за: <strong>"{{ search_query }}"</strong> 
-            <a href="{{ url_for('index', status=current_status) }}" class="ms-2 text-decoration-none">изчисти</a>
+        <div class="row g-2">
+            <div class="col-6">
+                <select name="genre" class="form-select form-select-sm filter-select shadow-sm" onchange="this.form.submit()">
+                    <option value="All">Всички Жанрове</option>
+                    {% for g in genres %}
+                    <option value="{{ g }}" {% if current_genre == g %}selected{% endif %}>{{ g }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6">
+                <select name="year" class="form-select form-select-sm filter-select shadow-sm" onchange="this.form.submit()">
+                    <option value="All">Всички Години</option>
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if current_year == y %}selected{% endif %}>{{ y }} г.</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
+    </form>
+
+    <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+        <div class="results-count">
+            {% if search_query or current_genre != 'All' or current_year != 'All' %}
+                Намерени: {{ total_books if total_books else books|length }} книги
+            {% endif %}
+        </div>
+        {% if search_query or current_genre != 'All' or current_year != 'All' %}
+            <a href="{{ url_for('index', status=current_status) }}" class="small text-decoration-none text-danger" style="font-size: 0.7rem;">Изчисти филтри</a>
         {% endif %}
     </div>
 
     <div class="list-group shadow-sm">
         {% if books %}
             {% for book in books %}
-            <a href="{{ url_for('book_details', book_id=book.id) }}" class="list-group-item list-group-item-action book-card d-flex align-items-center">
+            <a href="{{ url_for('book_details', book_id=book.id, status=current_status, genre=current_genre, year=current_year, search=search_query, page=current_page) }}" 
+               class="list-group-item list-group-item-action book-card d-flex align-items-center border-0 shadow-sm mb-2">
                 
-                <img src="{{ get_cover_url(book.cover_path) }}" class="thumb-img me-3" 
+                <img src="{{ get_cover_url(book.cover_path) }}" class="thumb-img me-3 shadow-sm" 
                      onerror="this.src='https://via.placeholder.com/45x65?text=No+Img'">
                 
                 <div class="flex-grow-1">
-                    <h6 class="mb-0 fw-bold">{{ book.title }}</h6>
-                    <small class="text-muted">{{ book.author }}</small>
+                    <h6 class="mb-0 fw-bold text-truncate" style="max-width: 180px;">{{ book.title }}</h6>
+                    <small class="text-muted d-block text-truncate" style="max-width: 180px;">{{ book.author }}</small>
+                    {% if book.year_published %}
+                    <span class="badge bg-light text-muted fw-normal p-0" style="font-size: 0.65rem;">{{ book.year_published }} г.</span>
+                    {% endif %}
                 </div>
                 
                 <div class="text-end">
-                    <span class="badge bg-light text-dark border small d-block mb-1">{{ book.rating }}⭐</span>
+                    <span class="badge bg-light text-dark border-0 small d-block mb-1 shadow-sm">{{ book.rating }}⭐</span>
                 </div>
             </a>
             {% endfor %}
         {% else %}
-            <div class="text-center py-5">
-                <p class="text-muted">Няма открити книги по тези критерии.</p>
-                <a href="{{ url_for('index') }}" class="btn btn-sm btn-link">Върни се към всички</a>
+            <div class="text-center py-5 bg-white rounded shadow-sm">
+                <p class="text-muted mb-0">Няма открити книги по тези критерии.</p>
+                <a href="{{ url_for('index') }}" class="btn btn-sm btn-link mt-2">Нулирай всичко</a>
             </div>
         {% endif %}
     </div>
 
     {% if total_pages > 1 %}
-    <div class="d-flex justify-content-between align-items-center mt-4">
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-5">
         {% if current_page > 1 %}
-            <a href="{{ url_for('index', status=current_status, search=search_query, page=current_page-1) }}" class="btn btn-sm btn-outline-primary">← Предишна</a>
+            <a href="{{ url_for('index', status=current_status, search=search_query, genre=current_genre, year=current_year, page=current_page-1) }}" class="btn btn-sm btn-outline-primary shadow-sm">← Предишна</a>
         {% else %}
             <div></div>
         {% endif %}
         
-        <span class="small text-muted text-center">Стр. {{ current_page }} от {{ total_pages }}</span>
+        <span class="small text-muted text-center fw-bold">Стр. {{ current_page }} от {{ total_pages }}</span>
         
         {% if current_page < total_pages %}
-            <a href="{{ url_for('index', status=current_status, search=search_query, page=current_page+1) }}" class="btn btn-sm btn-outline-primary">Следваща →</a>
+            <a href="{{ url_for('index', status=current_status, search=search_query, genre=current_genre, year=current_year, page=current_page+1) }}" class="btn btn-sm btn-outline-primary shadow-sm">Следваща →</a>
         {% else %}
             <div></div>
         {% endif %}
     </div>
     {% endif %}
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const activeBtn = document.querySelector('.filter-btn.btn-primary');
+        if (activeBtn) {
+            activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }
+    });
+</script>
+
 </body>
 </html>
