@@ -219,18 +219,22 @@ def delete_book(book_id):
 
 # --- 4. WEB APP ФУНКЦИИ (Render) ---
 
-def get_books_paginated(status_filter='All', genre_filter='All', limit=20, offset=0, search_query=None):
+def get_books_paginated(status_filter='All', genre_filter='All', year_filter='All', limit=20, offset=0, search_query=None):
     conn = get_db_connection()
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = "SELECT * FROM books WHERE 1=1"
         params = []
+
         if status_filter != 'All':
             query += " AND status = %s"; params.append(status_filter)
         if genre_filter != 'All':
             query += " AND genre = %s"; params.append(genre_filter)
+        if year_filter != 'All':
+            query += " AND year_published = %s"; params.append(year_filter)
         if search_query:
-            query += " AND (title ILIKE %s OR author ILIKE %s)"; params.extend([f'%{search_query}%', f'%{search_query}%'])
+            query += " AND (title ILIKE %s OR author ILIKE %s)"; 
+            params.extend([f'%{search_query}%', f'%{search_query}%'])
         
         query += " ORDER BY date_finished DESC NULLS LAST, title ASC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
@@ -238,7 +242,7 @@ def get_books_paginated(status_filter='All', genre_filter='All', limit=20, offse
         return cur.fetchall()
     finally: conn.close()
 
-def get_total_book_count(status_filter='All', genre_filter='All', search_query=None):
+def get_total_book_count(status_filter='All', genre_filter='All', year_filter='All', search_query=None):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -248,10 +252,22 @@ def get_total_book_count(status_filter='All', genre_filter='All', search_query=N
             query += " AND status = %s"; params.append(status_filter)
         if genre_filter != 'All':
             query += " AND genre = %s"; params.append(genre_filter)
+        if year_filter != 'All':
+            query += " AND year_published = %s"; params.append(year_filter)
         if search_query:
-            query += " AND (title ILIKE %s OR author ILIKE %s)"; params.extend([f'%{search_query}%', f'%{search_query}%'])
+            query += " AND (title ILIKE %s OR author ILIKE %s)"; 
+            params.extend([f'%{search_query}%', f'%{search_query}%'])
         cur.execute(query, params)
         return cur.fetchone()[0]
+    finally: conn.close()
+
+def get_unique_years_published():
+    """Извлича всички налични години на издаване от базата."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT year_published FROM books WHERE year_published != '' AND year_published IS NOT NULL ORDER BY year_published DESC")
+        return [row[0] for row in cur.fetchall()]
     finally: conn.close()
 
 def get_book_by_id(book_id):
