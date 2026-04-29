@@ -12,6 +12,8 @@
         .info-data { font-weight: 600; margin-bottom: 10px; }
         .back-btn { font-weight: 500; color: #6c757d; transition: all 0.2s; }
         .back-btn:hover { color: #0d6efd; }
+        .rating-star-btn { color: #ffc107; text-decoration: none; font-size: 1.3rem; border: none; background: none; transition: transform 0.1s; }
+        .rating-star-btn:hover { transform: scale(1.2); }
     </style>
 </head>
 <body class="bg-light">
@@ -41,7 +43,20 @@
         <div class="row text-center border-bottom pb-3 mb-3">
             <div class="col-4 border-end">
                 <div class="info-label">Rating</div>
-                <div class="info-data">{{ book.rating }} ⭐</div>
+                <div class="dropdown">
+                    <div class="info-data clickable" data-bs-toggle="dropdown" aria-expanded="false">
+                        {{ book.rating if book.rating else 0 }} ⭐
+                    </div>
+                    <ul class="dropdown-menu shadow border-0 text-center p-2" style="border-radius: 12px; min-width: 150px;">
+                        <li>
+                            <form action="{{ url_for('rate_book', book_id=book.id) }}" method="POST" class="d-flex justify-content-around px-1">
+                                {% for i in range(1, 6) %}
+                                <button type="submit" name="rating" value="{{ i }}" class="rating-star-btn px-1">{{ i }}</button>
+                                {% endfor %}
+                            </form>
+                        </li>
+                    </ul>
+                </div>
             </div>
             <div class="col-4 border-end">
                 <div class="info-label">Pages</div>
@@ -56,7 +71,16 @@
         <div class="row">
             <div class="col-6 mb-3">
                 <div class="info-label">Status</div>
-                <div class="info-data"><span class="badge bg-primary rounded-pill px-3">{{ book.status }}</span></div>
+                <div class="info-data d-flex align-items-center gap-2">
+                    <span class="badge bg-primary rounded-pill px-3">{{ book.status }}</span>
+                    {% if book.status != 'Read' %}
+                    <form action="{{ url_for('mark_as_read', book_id=book.id) }}" method="POST">
+                        <button type="submit" class="btn btn-sm btn-success py-0 px-2 shadow-sm" style="font-size: 0.7rem; border-radius: 10px;">
+                            ✓ Done
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
             <div class="col-6 mb-3">
                 <div class="info-label">Genre</div>
@@ -102,7 +126,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div id="mBody" class="modal-body">
-                </div>
+            </div>
         </div>
     </div>
 </div>
