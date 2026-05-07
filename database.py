@@ -143,14 +143,24 @@ def update_book_in_db(book_id, data):
     except: return False
     finally: conn.close()
 
-def update_book_status_only(book_id, new_status):
+def update_book_status_only(book_id, new_status, completion_date=None):
+    """Quickly updates status and optionally the completion date."""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE books SET status = %s WHERE id = %s", (new_status, book_id))
-        conn.commit(); return True
-    except: return False
-    finally: cur.close(); conn.close()
+        if completion_date:
+            cur.execute("UPDATE books SET status = %s, date_finished = %s WHERE id = %s", 
+                        (new_status, completion_date, book_id))
+        else:
+            cur.execute("UPDATE books SET status = %s WHERE id = %s", 
+                        (new_status, book_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Status Update Error: {e}")
+        return False
+    finally:
+        cur.close(); conn.close()
 
 def delete_book(book_id):
     conn = get_db_connection()
