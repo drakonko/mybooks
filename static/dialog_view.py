@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QHBoxLayout, QVBoxLayout, QLabel,
                              QPushButton, QTextEdit, QListWidget, QListWidgetItem, 
                              QMessageBox, QFrame, QComboBox, QWidget)
 from PyQt6.QtGui import QPixmap, QDesktopServices
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QTimer
 
 import database
 
@@ -17,16 +17,57 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 COVERS_DIR = os.path.join(BASE_DIR, "covers")
-# Линк към твоя Supabase Storage за преглед на корици, които не са на диска ти
 SUPABASE_IMG_URL = "https://pvajcaorfmgmdptrtdxh.supabase.co/storage/v1/object/public/covers/"
 
+# --- НОВ: СПЕЦИАЛИЗИРАН ПРОЗОРЕЦ ЗА ЧЕТЕНЕ НА AI РАЗКАЗ ---
+class ReadRecapDialog(QDialog):
+    def __init__(self, title, recap_text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"AI Story: {title}")
+        self.resize(900, 800)
+        
+        layout = QVBoxLayout(self)
+        
+        # Поле за четене с поддръжка на Markdown
+        self.viewer = QTextEdit()
+        self.viewer.setReadOnly(True)
+        
+        # ФИКС ЗА ПАРАГРАФИТЕ: Markdown изисква два нови реда за нов параграф.
+        # Ако текстът е слят, го разделяме изкуствено тук за по-добра четимост.
+        if recap_text:
+            if "\n\n" not in recap_text:
+                formatted_text = recap_text.replace("\n", "\n\n")
+            else:
+                formatted_text = recap_text
+            self.viewer.setMarkdown(formatted_text)
+        
+        # Стил за максимална четимост (line-height и padding)
+        self.viewer.setStyleSheet("""
+            QTextEdit {
+                background-color: #fdfdfd; 
+                padding: 35px; 
+                font-size: 16px; 
+                line-height: 1.8; 
+                color: #2c3e50;
+                border: 1px solid #dcdde1;
+            }
+        """)
+        
+        close_btn = QPushButton("Затвори")
+        close_btn.setMinimumHeight(45)
+        close_btn.setStyleSheet("font-weight: bold; background-color: #bdc3c7;")
+        close_btn.clicked.connect(self.close)
+        
+        layout.addWidget(self.viewer)
+        layout.addWidget(close_btn)
+
+# --- ОСНОВЕН ПРОЗОРЕЦ ЗА ПРЕГЛЕД ---
 class ViewBookDialog(QDialog):
     def __init__(self, book_data, parent=None):
         super().__init__(parent)
-        # Превръщаме в речник, ако данните идват като ред от DataFrame
         self.book_data = book_data.to_dict() if hasattr(book_data, 'to_dict') else book_data
         self.setWindowTitle(f"Детайли за: {self.book_data.get('title')}")
-        self.resize(850, 650)
+        self.resize(950, 700)
         
         layout = QHBoxLayout(self)
         
@@ -46,10 +87,19 @@ class ViewBookDialog(QDialog):
         self.tech_details_lbl.setStyleSheet("font-size: 13px; color: #7f8c8d; margin-top: 5px;")
         self.tech_details_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # ЛИЛАВ БУТОН ЗА AI RECAP
+        self.btn_ai_recap = QPushButton("📖 Прочети AI разказ")
+        self.btn_ai_recap.setStyleSheet("""
+            background-color: #8e44ad; color: white; padding: 12px; 
+            font-weight: bold; border-radius: 6px; margin-top: 8px;
+        """)
+        self.btn_ai_recap.clicked.connect(self.open_ai_recap)
+        self.btn_ai_recap.hide() # Скрит по подразбиране
+
         self.btn_kindle_cover = QPushButton("📺 Корица към Kindle")
         self.btn_kindle_cover.setStyleSheet("""
-            background-color: #8e44ad; color: white; padding: 10px; 
-            font-weight: bold; border-radius: 6px; margin-top: 10px;
+            background-color: #34495e; color: white; padding: 10px; 
+            font-weight: bold; border-radius: 6px; margin-top: 5px;
         """)
         self.btn_kindle_cover.clicked.connect(self.sync_to_screensaver)
 
@@ -82,6 +132,7 @@ class ViewBookDialog(QDialog):
         left_panel.addWidget(self.cover_lbl)
         left_panel.addWidget(self.stars_lbl)
         left_panel.addWidget(self.tech_details_lbl)
+        left_panel.addWidget(self.btn_ai_recap)
         left_panel.addWidget(self.btn_kindle_cover)
         left_panel.addWidget(status_label)
         left_panel.addLayout(status_row)
@@ -158,46 +209,67 @@ class ViewBookDialog(QDialog):
         self.refresh_ui()
 
     def update_status_db(self):
-        """Бързо обновяване само на статуса в Supabase."""
+        """Quickly update status and handle the date for the 'Read' filter."""
         new_status = self.status_dropdown.currentText()
         book_id = self.book_data.get('id')
+        
+        # LOGIC: If status is 'Read', set date to today if it's currently empty
+        date_to_save = None
+        if new_status == "Read":
+            # Only set today's date if there isn't one already
+            existing_date = self.book_data.get('date_finished', '')
+            if not existing_date or existing_date == "None":
+                import datetime
+                date_to_save = datetime.date.today().strftime("%d.%m.%Y")
+        
         try:
-            database.update_book_status_only(book_id, new_status)
+            # Call the updated database function
+            database.update_book_status_only(book_id, new_status, date_to_save)
+            
             self.book_data['status'] = new_status
+            if date_to_save:
+                self.book_data['date_finished'] = date_to_save
+                
             self.refresh_ui()
             
-            # Опресняваме таблицата в главния прозорец
+            # Refresh main table
             if self.parent() and hasattr(self.parent(), 'load_data_from_db'):
                 self.parent().load_data_from_db(False)
             
             self.btn_save_status.setText("✓")
+            QTimer.singleShot(2000, lambda: self.btn_save_status.setText("Запази"))
+            
         except Exception as e:
             QMessageBox.critical(self, "Грешка", f"Неуспешно обновяване: {e}")
 
     def refresh_ui(self):
         d = self.book_data
         
-        # --- КОРУЦИ: Локално -> Облак ---
+        # --- КОРУЦИ ---
         filename = os.path.basename(str(d.get('cover_path', '')))
         local_path = os.path.join(COVERS_DIR, filename)
         
         if os.path.exists(local_path):
             self.cover_lbl.setPixmap(QPixmap(local_path).scaled(240, 360, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         else:
-            # Ако файлът го няма локално, опитваме да го заредим директно от Supabase URL
             try:
                 img_url = SUPABASE_IMG_URL + urllib.parse.quote(filename)
                 res = requests.get(img_url, timeout=3)
                 if res.status_code == 200:
-                    pix = QPixmap()
-                    pix.loadFromData(res.content)
+                    pix = QPixmap(); pix.loadFromData(res.content)
                     self.cover_lbl.setPixmap(pix.scaled(240, 360, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                else: self.cover_lbl.setText("Корицата се качва...")
-            except: self.cover_lbl.setText("Проблем с мрежата")
+                else: self.cover_lbl.setText("Няма корица")
+            except: self.cover_lbl.setText("Мрежова грешка")
+
+        # ПРОВЕРКА ЗА AI СИНОПСИС
+        recap_text = d.get('ai_recap')
+        if recap_text and str(recap_text).strip() and str(recap_text).lower() != "none":
+            self.btn_ai_recap.show()
+        else:
+            self.btn_ai_recap.hide()
 
         r = int(d.get('rating', 0) or 0)
         self.stars_lbl.setText("★" * r + "☆" * (5 - r))
-        
         self.tech_details_lbl.setText(f"📄 {d.get('number_of_pages', '???')} стр.  •  📅 {d.get('year_published', 'N/A')}")
         self.title_lbl.setText(str(d.get('title', 'Unknown')))
         self.author_lbl.setText(f"<b>Автор:</b> <a href='author:{d.get('author')}' style='color: #3498db; text-decoration:none;'>{d.get('author')}</a>")
@@ -215,6 +287,13 @@ class ViewBookDialog(QDialog):
         else: self.series_lbl.hide()
         
         self.desc_box.setText(str(d.get('description', 'Няма описание.')))
+
+    def open_ai_recap(self):
+        """Отваря специализирания четец за AI разказа."""
+        recap_text = self.book_data.get('ai_recap')
+        if recap_text:
+            dlg = ReadRecapDialog(self.book_data.get('title'), recap_text, self)
+            dlg.exec()
 
     def sync_to_screensaver(self):
         try:
@@ -252,6 +331,7 @@ class ViewBookDialog(QDialog):
             if database.delete_book(self.book_data.get('id')): 
                 self.accept()
 
+# --- ПОМОЩЕН ДИАЛОГ ЗА СПИСЪЦИ ---
 class GenericListDialog(QDialog):
     def __init__(self, filter_type, filter_value, parent=None):
         super().__init__(parent)
@@ -260,10 +340,8 @@ class GenericListDialog(QDialog):
         layout = QVBoxLayout(self)
         self.list_widget = QListWidget()
         
-        # Ползваме данните от паметта на главния прозорец
         all_books = database.fetch_all_books()
         col = "series_info" if filter_type == "series" else "author"
-        
         matches = all_books[all_books[col].astype(str).str.lower() == str(filter_value).lower()]
         
         for _, book in matches.iterrows():
