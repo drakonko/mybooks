@@ -4,6 +4,7 @@ import requests
 import shutil
 import webbrowser
 import urllib.parse
+import pandas as pd # Добавено за обработка на поредиците
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, 
                              QPushButton, QComboBox, QSpinBox, QDateEdit, 
                              QTextEdit, QHBoxLayout, QLabel, QMessageBox, 
@@ -26,7 +27,6 @@ if not os.path.exists(COVERS_DIR):
 SUPABASE_IMG_URL = "https://pvajcaorfmgmdptrtdxh.supabase.co/storage/v1/object/public/covers/"
 
 class WebCoverSearchDialog(QDialog):
-    """Прозорец за избор на корица от Google Books."""
     def __init__(self, query, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Търсене на корица за: {query}")
@@ -65,12 +65,11 @@ class WebCoverSearchDialog(QDialog):
                     item_widget.setData(Qt.ItemDataRole.UserRole, thumb)
                     
                     img_data = requests.get(thumb, timeout=3).content
-                    pix = QPixmap()
-                    pix.loadFromData(img_data)
+                    pix = QPixmap(); pix.loadFromData(img_data)
                     item_widget.setIcon(QIcon(pix.scaled(120, 180, Qt.AspectRatioMode.KeepAspectRatio)))
                     self.list_widget.addItem(item_widget)
         except:
-            QMessageBox.warning(self, "Грешка", "Неуспешно свързване с Google Books.")
+            pass
 
     def accept_selection(self):
         if self.list_widget.currentItem():
@@ -85,7 +84,7 @@ class EditBookDialog(QDialog):
         self.setWindowTitle(f"Редактиране: {book_data.get('title', 'Нова книга')}")
         self.resize(850, 850) 
         
-        self.cover_path_hidden = str(book_data.get('cover_path', ''))
+        self.cover_path_hidden = str(book_data.get('cover_path', 'default_cover.png'))
         
         self.init_ui()
         self.load_book_values()
@@ -100,7 +99,7 @@ class EditBookDialog(QDialog):
         content_layout = QVBoxLayout(content_widget)
         content_layout.setSpacing(15)
 
-        # --- 1. СЕКЦИЯ КОРИЦА ---
+        # --- 1. КОРИЦА ---
         cover_container = QHBoxLayout()
         self.cover_preview = QLabel("Няма корица")
         self.cover_preview.setFixedSize(180, 270) 
@@ -109,20 +108,12 @@ class EditBookDialog(QDialog):
         cover_container.addWidget(self.cover_preview)
 
         cover_btn_stack = QVBoxLayout()
-        cover_btn_stack.setSpacing(8)
-        cover_btn_stack.addWidget(QLabel("<b>Опции за корица:</b>"))
-        
         self.browse_btn = QPushButton("📁 Локален файл")
         self.web_cover_btn = QPushButton("🌐 Търси в мрежата")
         self.web_cover_btn.setStyleSheet("background-color: #e67e22; color: white; font-weight: bold;")
-        self.clear_btn = QPushButton("🗑️ Изчисти корицата")
+        self.clear_btn = QPushButton("🗑️ Изчисти")
         
-        self.btn_annas = QPushButton("🔍 Anna's Archive")
-        self.btn_annas.setStyleSheet("background-color: #5d4037; color: white;")
-        self.btn_goodreads = QPushButton("📖 Goodreads")
-        self.btn_goodreads.setStyleSheet("background-color: #f4f1ea; color: #382110; border: 1px solid #d6d0c0;")
-
-        for btn in [self.browse_btn, self.web_cover_btn, self.clear_btn, self.btn_annas, self.btn_goodreads]:
+        for btn in [self.browse_btn, self.web_cover_btn, self.clear_btn]:
             btn.setMinimumHeight(35)
             cover_btn_stack.addWidget(btn)
         
@@ -131,28 +122,24 @@ class EditBookDialog(QDialog):
         content_layout.addLayout(cover_container)
 
         # --- 2. ОСНОВНА ИНФОРМАЦИЯ ---
-        main_info_form = QFormLayout()
-        self.crawl_btn = QPushButton("🚀 Deep Crawl (Goodreads Scraper)")
+        form = QFormLayout()
+        self.crawl_btn = QPushButton("🚀 Deep Crawl (Goodreads)")
         self.crawl_btn.setStyleSheet("background-color: #372213; color: white; font-weight: bold; padding: 10px;")
         
         self.isbn_in = QLineEdit()
         self.title_in = QLineEdit()
         self.author_in = QLineEdit()
         
-        self.meta_btn = QPushButton("🔍 Авто-попълване през ISBN")
-        self.meta_btn.setStyleSheet("background-color: #3498db; color: white; font-weight: bold;")
+        form.addRow("", self.crawl_btn)
+        form.addRow("ISBN-13:", self.isbn_in)
+        form.addRow("Заглавие *:", self.title_in)
+        form.addRow("Автор *:", self.author_in)
+        content_layout.addLayout(form)
 
-        main_info_form.addRow("", self.crawl_btn)
-        main_info_form.addRow("ISBN-13:", self.isbn_in)
-        main_info_form.addRow("", self.meta_btn)
-        main_info_form.addRow("Заглавие:", self.title_in)
-        main_info_form.addRow("Автор:", self.author_in)
-        content_layout.addLayout(main_info_form)
-
-        # --- 3. ГРИД ---
+        # --- 3. ГРИД ДЕТАЙЛИ ---
         grid_frame = QFrame()
         grid_frame.setStyleSheet("QFrame { border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; background: #fff; }")
-        grid_layout = QGridLayout(grid_frame)
+        grid = QGridLayout(grid_frame)
 
         self.genre_in = QComboBox()
         self.genre_in.addItems(["Fiction", "Non-Fiction", "Fantasy", "Sci-Fi", "Mystery", "Horror", "History", "Biography", "Uncategorized"])
@@ -162,49 +149,61 @@ class EditBookDialog(QDialog):
         self.pages_in = QLineEdit()
         self.year_in = QLineEdit()
         self.avg_rating_in = QLineEdit()
-        self.series_in = QComboBox(); self.series_in.setEditable(True)
+        
+        # Интелигентно падащо меню за поредици
+        self.series_in = QComboBox()
+        self.series_in.setEditable(True)
+        self.load_existing_series()
+        
         self.series_num_in = QSpinBox(); self.series_num_in.setRange(0, 999)
         self.date_in = QDateEdit(); self.date_in.setCalendarPopup(True)
 
-        grid_layout.addWidget(QLabel("<b>Жанр:</b>"), 0, 0); grid_layout.addWidget(self.genre_in, 0, 1)
-        grid_layout.addWidget(QLabel("<b>Година:</b>"), 0, 2); grid_layout.addWidget(self.year_in, 0, 3)
-        grid_layout.addWidget(QLabel("<b>Статус:</b>"), 1, 0); grid_layout.addWidget(self.status_in, 1, 1)
-        grid_layout.addWidget(QLabel("<b>Общ рейтинг:</b>"), 1, 2); grid_layout.addWidget(self.avg_rating_in, 1, 3)
-        grid_layout.addWidget(QLabel("<b>Моят рейтинг:</b>"), 2, 0); grid_layout.addWidget(self.rating_in, 2, 1)
-        grid_layout.addWidget(QLabel("<b>Поредица:</b>"), 2, 2); grid_layout.addWidget(self.series_in, 2, 3)
-        grid_layout.addWidget(QLabel("<b>Страници:</b>"), 3, 0); grid_layout.addWidget(self.pages_in, 3, 1)
-        grid_layout.addWidget(QLabel("<b>№ в поредица:</b>"), 3, 2); grid_layout.addWidget(self.series_num_in, 3, 3)
-        grid_layout.addWidget(QLabel("<b>Завършена на:</b>"), 4, 0); grid_layout.addWidget(self.date_in, 4, 1)
+        grid.addWidget(QLabel("<b>Жанр:</b>"), 0, 0); grid.addWidget(self.genre_in, 0, 1)
+        grid.addWidget(QLabel("<b>Година:</b>"), 0, 2); grid.addWidget(self.year_in, 0, 3)
+        grid.addWidget(QLabel("<b>Статус:</b>"), 1, 0); grid.addWidget(self.status_in, 1, 1)
+        grid.addWidget(QLabel("<b>Общ рейтинг:</b>"), 1, 2); grid.addWidget(self.avg_rating_in, 1, 3)
+        grid.addWidget(QLabel("<b>Моят рейтинг:</b>"), 2, 0); grid.addWidget(self.rating_in, 2, 1)
+        grid.addWidget(QLabel("<b>Поредица:</b>"), 2, 2); grid.addWidget(self.series_in, 2, 3)
+        grid.addWidget(QLabel("<b>Страници:</b>"), 3, 0); grid.addWidget(self.pages_in, 3, 1)
+        grid.addWidget(QLabel("<b>№ в поредица:</b>"), 3, 2); grid.addWidget(self.series_num_in, 3, 3)
+        grid.addWidget(QLabel("<b>Завършена на:</b>"), 4, 0); grid.addWidget(self.date_in, 4, 1)
 
         content_layout.addWidget(grid_frame)
 
         # --- 4. ОПИСАНИЕ ---
         content_layout.addWidget(QLabel("<b>Анотация:</b>"))
         self.desc_in = QTextEdit()
-        self.desc_in.setMinimumHeight(180)
+        self.desc_in.setMinimumHeight(150)
         content_layout.addWidget(self.desc_in)
 
         scroll.setWidget(content_widget)
         outer_layout.addWidget(scroll)
 
-        # --- 5. ФУТЪР ---
+        # --- 5. БУТОНИ ---
         btns = QHBoxLayout()
-        save_btn = QPushButton("💾 ЗАПАЗИ И СИНХРОНИЗИРАЙ")
-        save_btn.setStyleSheet("background-color: #2ecc71; color: white; font-weight: bold; padding: 12px; font-size: 14px;")
+        save_btn = QPushButton("💾 ЗАПАЗИ")
+        save_btn.setStyleSheet("background-color: #2ecc71; color: white; font-weight: bold; padding: 12px;")
         save_btn.clicked.connect(self.save_data)
         cancel_btn = QPushButton("Отказ")
         cancel_btn.clicked.connect(self.reject)
         btns.addWidget(save_btn); btns.addWidget(cancel_btn)
         outer_layout.addLayout(btns)
 
-        # Свързване на сигнали
+        # Сигнали
         self.status_in.currentTextChanged.connect(self.toggle_date_field)
         self.browse_btn.clicked.connect(self.browse_local_image)
         self.web_cover_btn.clicked.connect(self.search_covers_online)
         self.clear_btn.clicked.connect(self.clear_current_cover)
-        self.btn_annas.clicked.connect(self.search_annas)
-        self.btn_goodreads.clicked.connect(self.search_goodreads)
         self.crawl_btn.clicked.connect(self.run_goodreads_crawl)
+
+    def load_existing_series(self):
+        """Зарежда всички уникални поредици от базата за улеснение."""
+        try:
+            df = database.fetch_all_books()
+            if not df.empty and 'series_info' in df.columns:
+                series_list = sorted(df['series_info'].unique().tolist())
+                self.series_in.addItems([str(s) for s in series_list if s and str(s) != 'nan'])
+        except: pass
 
     def load_book_values(self):
         d = self.book_data
@@ -217,7 +216,7 @@ class EditBookDialog(QDialog):
         self.pages_in.setText(str(d.get('number_of_pages', '0')))
         self.year_in.setText(str(d.get('year_published', '')))
         self.avg_rating_in.setText(str(d.get('average_rating', '')))
-        self.series_in.setCurrentText(str(d.get('series_info', '')))
+        self.series_in.setEditText(str(d.get('series_info', '')))
         self.desc_in.setPlainText(str(d.get('description', '')))
         
         try:
@@ -227,8 +226,10 @@ class EditBookDialog(QDialog):
 
         date_str = str(d.get('date_finished', ''))
         if date_str and len(date_str) > 5:
-            self.date_in.setDate(QDate.fromString(date_str, "yyyy-MM-dd"))
-        else: self.date_in.setDate(QDate.currentDate())
+            # Поддържаме и ISO и Mixed формат
+            self.date_in.setDate(QDate.fromString(date_str[:10], "yyyy-MM-dd"))
+        else: 
+            self.date_in.setDate(QDate.currentDate())
         
         self.toggle_date_field(self.status_in.currentText())
         self.update_cover_preview(self.cover_path_hidden)
@@ -243,12 +244,10 @@ class EditBookDialog(QDialog):
                     filename = f"web_{os.urandom(2).hex()}.jpg"
                     dest = os.path.join(COVERS_DIR, filename)
                     res = requests.get(img_url, timeout=5)
-                    with open(dest, "wb") as f:
-                        f.write(res.content)
+                    with open(dest, "wb") as f: f.write(res.content)
                     self.cover_path_hidden = filename
                     self.update_cover_preview(dest)
-                except Exception as e:
-                    QMessageBox.warning(self, "Грешка", f"Неуспешно изтегляне: {e}")
+                except Exception as e: QMessageBox.warning(self, "Грешка", str(e))
 
     def browse_local_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Избери корица", "", "Images (*.jpg *.png)")
@@ -261,10 +260,9 @@ class EditBookDialog(QDialog):
     def clear_current_cover(self):
         self.cover_path_hidden = "default_cover.png"
         self.cover_preview.setText("Изчистено")
-        self.cover_preview.setStyleSheet("border: 2px dashed #e74c3c; background-color: #fdf2f2;")
 
     def update_cover_preview(self, path):
-        if not path or "none" in str(path).lower(): return
+        if not path: return
         filename = os.path.basename(path)
         local_path = os.path.join(COVERS_DIR, filename)
         if os.path.exists(local_path):
@@ -278,37 +276,35 @@ class EditBookDialog(QDialog):
             except: pass
 
     def save_data(self):
+        # ВАЛИДАЦИЯ
+        if not self.title_in.text().strip() or not self.author_in.text().strip():
+            QMessageBox.warning(self, "Внимание", "Заглавието и авторът са задължителни!")
+            return
+
         try:
             filename = os.path.basename(self.cover_path_hidden)
             
-            # 1. АВТОМАТИЧЕН ОБЛАЧЕН СИНХРОН НА КАРТИНКАТА
+            # Синхронизация на корица
             if filename and filename != "default_cover.png":
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-                success, msg = database.upload_cover_to_supabase(filename)
+                database.upload_cover_to_supabase(filename)
                 QApplication.restoreOverrideCursor()
-                if not success:
-                    print(f"Cloud Sync Warning: {msg}")
 
-            # 2. ПОДГОТОВКА НА ДАТАТА (ISO стандарт: 2026-04-24)
-            # Това гарантира, че в базата няма да влезе "24.4.2026 г."
-            if self.status_in.currentText() == "Read":
-                date_str = self.date_in.date().toString("yyyy-MM-dd")
-            else:
-                date_str = ""
+            date_str = self.date_in.date().toString("yyyy-MM-dd") if self.status_in.currentText() == "Read" else ""
 
-            # 3. СЪБИРАНЕ НА ДАННИТЕ (ТОЧНО 16 ПОЛЕТА)
+            # Подготовка на 16-те полета
             data = (
                 str(self.title_in.text()).strip(),
                 str(self.author_in.text()).strip(),
                 int(self.rating_in.value()),
                 str(self.status_in.currentText()),
-                date_str, # Нашата форматирана дата
+                date_str,
                 str(self.isbn_in.text()).strip(),
-                str(self.desc_in.toPlainText()[:100]).replace("\n", " "), # Кратко описание без нови редове
+                str(self.desc_in.toPlainText()[:100]).replace("\n", " "),
                 filename,
                 str(self.series_in.currentText()).strip(),
                 str(self.desc_in.toPlainText()),
-                str(self.isbn_in.text()).strip(), # isbn13
+                str(self.isbn_in.text()).strip(),
                 str(self.pages_in.text()).strip(),
                 str(self.avg_rating_in.text()).strip(),
                 str(self.year_in.text()).strip(),
@@ -316,46 +312,70 @@ class EditBookDialog(QDialog):
                 str(self.series_num_in.value())
             )
             
-            # 4. ЗАПИС В БАЗАТА
             if self.book_id:
-                if database.update_book_in_db(self.book_id, data):
-                    self.accept()
-                else:
-                    raise Exception("Грешка при обновяване в Supabase.")
+                if database.update_book_in_db(self.book_id, data): self.accept()
+                else: raise Exception("Грешка при обновяване.")
             else:
-                if database.add_new_book(data):
-                    self.accept()
-                else:
-                    raise Exception("Грешка при добавяне в Supabase.")
+                if database.add_new_book(data): self.accept()
+                else: raise Exception("Грешка при добавяне.")
                     
         except Exception as e:
-            QApplication.restoreOverrideCursor() # За всеки случай, ако е останал блокиран
-            QMessageBox.critical(self, "Грешка", f"Записът се провали: {e}")
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Грешка", str(e))
 
     def toggle_date_field(self, status):
         self.date_in.setEnabled(status == "Read")
 
-    def search_annas(self):
-        webbrowser.open(f"https://annas-archive.li/search?q={urllib.parse.quote(self.title_in.text())}")
-
-    def search_goodreads(self):
-        webbrowser.open(f"https://www.goodreads.com/search?q={urllib.parse.quote(self.title_in.text())}")
-
     def run_goodreads_crawl(self):
         from logic.goodreads_scraper import scrape_goodreads
-        query = self.isbn_in.text() if self.isbn_in.text() else self.title_in.text()
-        if not query: return
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+
+        # Избираме заявка: ISBN има приоритет, ако липсва - заглавие
+        query = self.isbn_in.text().strip() if self.isbn_in.text().strip() else self.title_in.text().strip()
+        
+        if not query: 
+            QMessageBox.warning(self, "Внимание", "Моля, въведете заглавие или ISBN за търсене.")
+            return
+
+        # Визуална обратна връзка
         self.crawl_btn.setText("⏳ Проучване...")
+        self.crawl_btn.setEnabled(False) # Деактивираме бутона, за да няма повторни заявки
         QApplication.processEvents()
-        info = scrape_goodreads(query)
-        if info:
-            self.title_in.setText(info.get('title', ''))
-            self.author_in.setText(info.get('author', ''))
-            self.desc_in.setPlainText(info.get('description', ''))
-            self.pages_in.setText(str(info.get('pages', '')))
-            self.year_in.setText(str(info.get('year', '')))
-            self.series_in.setCurrentText(info.get('series', ''))
-            self.series_num_in.setValue(int(info.get('series_num', 0)) if info.get('series_num') else 0)
-            self.avg_rating_in.setText(str(info.get('avg_rating', '')))
-            QMessageBox.information(self, "Готово", "Данните са извлечени успешно!")
-        self.crawl_btn.setText("🚀 Deep Crawl (Goodreads Scraper)")
+
+        try:
+            info = scrape_goodreads(query)
+            
+            if info:
+                self.title_in.setText(info.get('title', ''))
+                self.author_in.setText(info.get('author', ''))
+                self.desc_in.setPlainText(info.get('description', ''))
+                self.pages_in.setText(str(info.get('pages', '')))
+                self.year_in.setText(str(info.get('year', '')))
+                self.series_in.setEditText(info.get('series', ''))
+
+                # --- ФИКС ЗА ГРЕШКАТА С ДРОБНИ ЧИСЛА (2.5, 1.5 и т.н.) ---
+                raw_series_num = info.get('series_num', '0')
+                try:
+                    # Първо превръщаме в float (за да разбере точките), после в int
+                    # Ако SpinBox-ът ти е цяло число, ще вземе '2' от '2.5'
+                    clean_series_num = int(float(str(raw_series_num)))
+                    self.series_num_in.setValue(clean_series_num)
+                except (ValueError, TypeError):
+                    self.series_num_in.setValue(0)
+
+                self.avg_rating_in.setText(str(info.get('avg_rating', '')))
+                QMessageBox.information(self, "Готово", "Данните са извлечени успешно!")
+            else:
+                QMessageBox.warning(self, "Няма резултати", "Goodreads не върна информация за тази книга.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Грешка", f"Възникна неочаквана грешка при пълзенето:\n{e}")
+
+        finally:
+            # Винаги връщаме бутона в първоначално състояние
+            self.crawl_btn.setText("🚀 Deep Crawl (Goodreads)")
+            self.crawl_btn.setEnabled(True)
+
+
+
+   
